@@ -98,7 +98,8 @@ var getLink = function (body) {
 
     // beer filter :D
     links.forEach(function (Link) {
-        if (Link.href.indexOf('https://steemit.com/beer/') !== -1) {
+        if (Link.href.indexOf('https://steemit.com/beer/') !== -1 ||
+            Link.href.indexOf('https://steemit.com/beersaturday/') !== -1) {
             result.push(Link.href);
         }
     });
