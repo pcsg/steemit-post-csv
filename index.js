@@ -2,12 +2,18 @@ var Form   = document.querySelector('Form');
 var Input  = document.querySelector('[name="url"]');
 var Result = document.querySelector('.result');
 
+var server = 'wss://steemd-int.steemit.com';
+
+steem.api.setOptions({
+    url: server
+});
+
 var generate = function (author, permlink) {
     return new Promise(function (resolve) {
         console.log('call api');
 
         steem.api.getContentReplies(author, permlink, function (err, result) {
-            var i, len, entry, votes, link, Calc;
+            var i, len, entry, votes, link, Calc, postData;
             var data = [];
             var List = [];
 
@@ -32,12 +38,22 @@ var generate = function (author, permlink) {
                     continue;
                 }
 
-                Calc = getVote(entry.author, entry.permlink).then(function (res) {
-                    data.push({
-                        author: this.author,
-                        link  : this.link,
-                        votes : res.votes,
-                        weight: res.weight
+                Calc = getTagsFromPost(entry.author, link).then(function (results) {
+                    return results.indexOf('beersaturday');
+                }).then(function (hasBeersaturday) {
+                    if (hasBeersaturday === -1) {
+                        return;
+                    }
+
+                    var voteSelf = this;
+
+                    return getVote(this.author, getPermalinkFromUrl(this.link)).then(function (res) {
+                        data.push({
+                            author: voteSelf.author,
+                            link  : voteSelf.link,
+                            votes : res.votes,
+                            weight: res.weight
+                        });
                     });
                 }.bind({
                     author: entry.author,
@@ -48,6 +64,8 @@ var generate = function (author, permlink) {
             }
 
             Promise.all(List).then(function () {
+                console.warn(data);
+
                 downloadCSV(data);
                 resolve();
             });
@@ -98,8 +116,7 @@ var getLink = function (body) {
 
     // beer filter :D
     links.forEach(function (Link) {
-        if (Link.href.indexOf('https://steemit.com/beer/') !== -1 ||
-            Link.href.indexOf('https://steemit.com/beersaturday/') !== -1) {
+        if (Link.href.indexOf('https://steemit.com/') !== -1) {
             result.push(Link.href);
         }
     });
@@ -111,6 +128,55 @@ var getLink = function (body) {
     return false;
 };
 
+/**
+ * Return all tags from a steemit post
+ *
+ * @param {String} author
+ * @param {String} link
+ * @return {Promise}
+ */
+var getTagsFromPost = function (author, link) {
+    var permlink = getPermalinkFromUrl(link);
+
+    return steem.api.getContent(author, permlink).then(function (res) {
+        var metaData = {};
+
+        try {
+            metaData = JSON.parse(res.json_metadata);
+        } catch (e) {
+        }
+
+        if ("tags" in metaData) {
+            return metaData.tags;
+        }
+
+        return [];
+    });
+};
+
+/**
+ * Return the permalink part from a steemit url
+ *
+ * @param value
+ * @return {String}
+ */
+var getPermalinkFromUrl = function (value) {
+    var Url = new URI(value);
+
+    if (value.indexOf('https://steemit.com') === -1) {
+        console.error('No Steemit Url');
+        return '';
+    }
+
+    var path  = Url.path(),
+        parts = path.split('/');
+
+    return parts[3];
+};
+
+/**
+ * Form
+ */
 Form.addEventListener('submit', function (event) {
     event.preventDefault();
 
