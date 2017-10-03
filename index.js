@@ -12,15 +12,21 @@ var generate = function (author, permlink) {
     return new Promise(function (resolve) {
         console.log('call api');
 
-        steem.api.getContentReplies(author, permlink, function (err, result) {
-            var i, len, entry, votes, link, Calc, postData;
+        Promise.all([
+            steem.api.getContent(author, permlink),
+            steem.api.getContentReplies(author, permlink)
+        ]).then(function (result) {
+            var i, len, entry, votes, link, Calc;
             var data = [];
             var List = [];
 
-            for (i = 0, len = result.length; i < len; i++) {
+            var postData = result[0];
+            var replies  = result[1];
+
+            for (i = 0, len = replies.length; i < len; i++) {
                 console.log('Parse ...' + i);
 
-                entry = result[i];
+                entry = replies[i];
                 votes = '';
                 link  = '';
 
@@ -37,7 +43,7 @@ var generate = function (author, permlink) {
                 if (!link) {
                     continue;
                 }
-
+                
                 Calc = getTagsFromPost(entry.author, link).then(function (results) {
                     return results.indexOf('beersaturday');
                 }).then(function (hasBeersaturday) {
@@ -48,16 +54,31 @@ var generate = function (author, permlink) {
                     var voteSelf = this;
 
                     return getVote(this.author, getPermalinkFromUrl(this.link)).then(function (res) {
+                        var author   = voteSelf.author;
+                        var beerVote = postData.active_votes.filter(function (entry) {
+                            return author === entry.voter;
+                        });
+
+                        if (beerVote.length) {
+                            beerVote = beerVote[0].percent;
+                        } else {
+                            beerVote = 0;
+                        }
+
                         data.push({
-                            author: voteSelf.author,
-                            link  : voteSelf.link,
-                            votes : res.votes,
-                            weight: res.weight
+                            'Author'            : author,
+                            'Link'              : voteSelf.link,
+                            'Post Votes'        : res.votes,
+                            'Post Weight'       : res.weight,
+                            'Beer Vote'         : beerVote,
+                            'Beer Vote %'       : (beerVote / 100) + '%',
+                            'Beer Comment Votes': voteSelf.net_votes
                         });
                     });
                 }.bind({
-                    author: entry.author,
-                    link  : link
+                    author   : entry.author,
+                    net_votes: entry.net_votes,
+                    link     : link
                 }));
 
                 List.push(Calc);
